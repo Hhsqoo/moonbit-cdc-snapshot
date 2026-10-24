@@ -1,0 +1,198 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "Hhsqoo/moonbit-cdc-snapshot"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub async fn compare_repository_snapshots(String, String, String) -> SnapshotDiff raise SnapshotError
+
+pub fn compare_snapshot_manifests(SnapshotManifest, SnapshotManifest) -> SnapshotDiff raise SnapshotError
+
+pub async fn create_snapshot(String, String, String, config? : FastCdcConfig, excludes? : Array[String], skip_symlinks? : Bool) -> SnapshotSummary raise SnapshotError
+
+pub let default_config : FastCdcConfig
+
+pub fn fastcdc_ranges(BytesView, config? : FastCdcConfig) -> Array[ChunkRange] raise SnapshotError
+
+pub async fn forget_snapshot(String, String, Bool) -> ForgetResult raise SnapshotError
+
+pub async fn garbage_collect(String, Bool) -> GarbageCollectionReport raise SnapshotError
+
+pub fn glob_matches(String, String) -> Bool raise SnapshotError
+
+pub async fn init_repository(String) -> Unit raise SnapshotError
+
+pub async fn inspect_repository(String) -> RepositoryStats raise SnapshotError
+
+pub async fn list_repository_snapshots(String) -> Array[SnapshotSummary] raise SnapshotError
+
+pub async fn list_snapshot_ids(String) -> Array[String] raise SnapshotError
+
+pub async fn read_repository_manifest(String, String) -> SnapshotManifest raise SnapshotError
+
+pub async fn require_repository(String) -> Unit raise SnapshotError
+
+pub async fn restore_repository_snapshot(String, String, String) -> Unit raise SnapshotError
+
+pub fn sha256_hex(BytesView) -> String
+
+pub fn validate_glob(String) -> Unit raise SnapshotError
+
+pub fn validate_relative_path(String) -> Unit raise SnapshotError
+
+pub fn validate_snapshot_id(String) -> Unit raise SnapshotError
+
+pub async fn verify_entire_repository(String) -> Array[SnapshotSummary] raise SnapshotError
+
+pub async fn verify_repository_snapshot(String, String) -> SnapshotSummary raise SnapshotError
+
+// Errors
+pub(all) suberror SnapshotError {
+  SnapshotError(String)
+}
+
+// Types and methods
+pub(all) struct ChunkRange {
+  start : Int32
+  length : Int32
+} derive(Eq, @debug.Debug)
+pub fn ChunkRange::equal(Self, Self) -> Bool
+pub fn ChunkRange::not_equal(Self, Self) -> Bool
+pub fn ChunkRange::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ChunkRef {
+  digest : String
+  size : Int32
+} derive(Eq, @debug.Debug)
+pub fn ChunkRef::equal(Self, Self) -> Bool
+pub fn ChunkRef::not_equal(Self, Self) -> Bool
+pub fn ChunkRef::to_repr(Self) -> @debug.Repr
+
+pub(all) struct FastCdcConfig {
+  min : Int32
+  average : Int32
+  max : Int32
+} derive(Eq, @debug.Debug)
+pub fn FastCdcConfig::equal(Self, Self) -> Bool
+pub fn FastCdcConfig::not_equal(Self, Self) -> Bool
+pub fn FastCdcConfig::to_repr(Self) -> @debug.Repr
+pub fn FastCdcConfig::validate(Self) -> Unit raise SnapshotError
+
+pub struct FastCdcStream {
+  config : FastCdcConfig
+  buffer : FixedArray[Byte]
+  mut head : Int32
+  mut length : Int32
+  mut emitted : Int32
+  mask_small : UInt64
+  mask_large : UInt64
+}
+pub fn FastCdcStream::finish(Self) -> Array[Bytes] raise SnapshotError
+pub fn FastCdcStream::new(FastCdcConfig) -> Self raise SnapshotError
+pub fn FastCdcStream::push(Self, BytesView) -> Array[Bytes] raise SnapshotError
+
+pub(all) struct FileRecord {
+  path : String
+  size : Int64
+  digest : String
+  chunks : Array[ChunkRef]
+} derive(Eq, @debug.Debug)
+pub fn FileRecord::equal(Self, Self) -> Bool
+pub fn FileRecord::not_equal(Self, Self) -> Bool
+pub fn FileRecord::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ForgetResult {
+  id : String
+  applied : Bool
+  logical_bytes : Int64
+  file_count : Int32
+} derive(Eq, @debug.Debug)
+pub fn ForgetResult::equal(Self, Self) -> Bool
+pub fn ForgetResult::not_equal(Self, Self) -> Bool
+pub fn ForgetResult::to_repr(Self) -> @debug.Repr
+
+pub(all) struct GarbageCollectionReport {
+  applied : Bool
+  candidate_count : Int32
+  candidate_bytes : Int64
+  removed_count : Int32
+  removed_bytes : Int64
+  temporary_count : Int32
+  temporary_bytes : Int64
+  removed_temporary_count : Int32
+  removed_temporary_bytes : Int64
+  candidates : Array[String]
+  temporary_files : Array[String]
+} derive(Eq, @debug.Debug)
+pub fn GarbageCollectionReport::equal(Self, Self) -> Bool
+pub fn GarbageCollectionReport::not_equal(Self, Self) -> Bool
+pub fn GarbageCollectionReport::to_repr(Self) -> @debug.Repr
+
+pub(all) struct RepositoryStats {
+  snapshot_count : Int32
+  file_count : Int32
+  directory_count : Int32
+  logical_bytes : Int64
+  referenced_chunk_count : Int32
+  referenced_chunk_bytes : Int64
+  object_count : Int32
+  object_bytes : Int64
+  missing_object_count : Int32
+  size_mismatch_count : Int32
+  orphan_object_count : Int32
+  orphan_object_bytes : Int64
+} derive(Eq, @debug.Debug)
+pub fn RepositoryStats::equal(Self, Self) -> Bool
+pub fn RepositoryStats::not_equal(Self, Self) -> Bool
+pub fn RepositoryStats::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SnapshotDiff {
+  added : Array[String]
+  removed : Array[String]
+  changed : Array[String]
+  unchanged : Array[String]
+  added_bytes : Int64
+  removed_bytes : Int64
+  changed_bytes : Int64
+  unchanged_bytes : Int64
+  reused_chunk_bytes : Int64
+  new_chunk_bytes : Int64
+} derive(Eq, @debug.Debug)
+pub fn SnapshotDiff::equal(Self, Self) -> Bool
+pub fn SnapshotDiff::not_equal(Self, Self) -> Bool
+pub fn SnapshotDiff::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SnapshotManifest {
+  version : Int32
+  id : String
+  root_name : String
+  root_is_file : Bool
+  config : FastCdcConfig
+  total_size : Int64
+  directories : Array[String]
+  files : Array[FileRecord]
+} derive(Eq, @debug.Debug)
+pub fn SnapshotManifest::equal(Self, Self) -> Bool
+pub fn SnapshotManifest::from_json(String) -> Self raise SnapshotError
+pub fn SnapshotManifest::not_equal(Self, Self) -> Bool
+pub fn SnapshotManifest::to_json(Self) -> String
+pub fn SnapshotManifest::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SnapshotSummary {
+  id : String
+  file_count : Int32
+  directory_count : Int32
+  chunk_count : Int32
+  total_bytes : Int64
+  unique_chunk_count : Int32
+  unique_chunk_bytes : Int64
+} derive(Eq, @debug.Debug)
+pub fn SnapshotSummary::equal(Self, Self) -> Bool
+pub fn SnapshotSummary::not_equal(Self, Self) -> Bool
+pub fn SnapshotSummary::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

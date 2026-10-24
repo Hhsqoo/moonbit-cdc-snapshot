@@ -1,0 +1,12 @@
+import {
+  "moonbitlang/core/debug",
+  "moonbitlang/core/json",
+  "moonbitlang/core/hashmap",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/x/fs",
+  "moonbitlang/x/path",
+  "moonbitlang/async",
+  "moonbitlang/async/fs" @afs,
+  "moonbitstack/mooncrypt/hash/sha2",
+  "moonbitstack/moonbase/base16",
+}

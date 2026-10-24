@@ -131,7 +131,7 @@ async fn collect_tree(
     match safe_async_kind(absolute_path) {
       @afs.FileKind::Directory => {
         directories.push(relative_path)
-        guard files.length() + directories.length() < max_manifest_entries else {
+        guard files.length() + directories.length() <= max_manifest_entries else {
           raise SnapshotError("snapshot exceeds the 100,000 entry limit")
         }
         collect_tree(

@@ -57,7 +57,10 @@ Snapshot IDs use lowercase letters, digits, `_`, and `-`. Exclusion patterns
 use `/` separators: `*` matches within one path component and `**` can cross
 directory separators. A matched directory and its contents are skipped.
 Symbolic links are rejected by default. `--skip-symlinks` omits them without
-following their targets. Other special files are rejected.
+following their targets. Other special files are rejected. Manifest paths also
+reject Windows device names, trailing periods/spaces, control characters and
+filename characters that Windows cannot represent; manifests with such paths
+are rejected so restores remain portable across Windows and Unix systems.
 Chunk sizes are in bytes; the average must be a power of two, and the values
 must satisfy `min <= average <= max <= 4 MiB`.
 

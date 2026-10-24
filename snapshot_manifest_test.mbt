@@ -39,6 +39,21 @@ test "tree manifest rejects traversal and duplicate entries" {
     @moonbit-cdc-snapshot.SnapshotError::SnapshotError(_) => ()
   }
 
+  for invalid_path in ["data/.. /escape.txt", "data/NUL.txt"] {
+    let invalid_manifest = json.replace_all(
+      old="data/alpha.txt",
+      new=invalid_path,
+    )
+    try {
+      ignore(
+        @moonbit-cdc-snapshot.SnapshotManifest::from_json(invalid_manifest),
+      )
+      panic()
+    } catch {
+      @moonbit-cdc-snapshot.SnapshotError::SnapshotError(_) => ()
+    }
+  }
+
   let manifest = sample_tree_manifest()
   let duplicate_manifest : @moonbit-cdc-snapshot.SnapshotManifest = {
     version: manifest.version,

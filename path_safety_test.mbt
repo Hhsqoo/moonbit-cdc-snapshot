@@ -13,13 +13,15 @@ test "snapshot ids accept only safe filename characters" {
 }
 
 ///|
-test "relative paths reject traversal, absolute paths and Windows prefixes" {
+test "relative paths reject traversal, absolute and non-portable names" {
   @moonbit-cdc-snapshot.validate_relative_path("nested/data.bin")
   @moonbit-cdc-snapshot.validate_relative_path("资料/说明.txt")
+  @moonbit-cdc-snapshot.validate_relative_path("normal/console.txt.backup")
   for
     invalid in [
       "", "/root/file", "../escape", "a/../escape", "a//b", "C:/outside", "a\\b",
-      ".", "a/.",
+      ".", "a/.", ".. ", "folder./file", "folder /file", "CON", "nul.txt", "Com9.log",
+      "lpt1", "COM¹.txt", "lpt³", "conin$.txt", "a?b", "a*b", "a<b", "a>b", "a|b",
     ] {
     try {
       @moonbit-cdc-snapshot.validate_relative_path(invalid)

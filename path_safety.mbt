@@ -39,15 +39,87 @@ pub fn validate_relative_path(path : String) -> Unit raise SnapshotError {
         bytes[segment_start + 1] == b'.') else {
         raise SnapshotError("manifest path contains a dot component")
       }
+      guard bytes[index - 1] != b'.' && bytes[index - 1] != b' ' else {
+        raise SnapshotError(
+          "manifest path components cannot end in a period or space",
+        )
+      }
+      guard !is_windows_reserved_device_name(bytes[segment_start:index]) else {
+        raise SnapshotError("manifest path contains a reserved device name")
+      }
       segment_start = index + 1
     } else {
-      guard bytes[index] != b'\\' &&
+      guard bytes[index].to_int() >= 32 &&
+        bytes[index] != b'<' &&
+        bytes[index] != b'>' &&
+        bytes[index] != b'"' &&
+        bytes[index] != b'|' &&
+        bytes[index] != b'?' &&
+        bytes[index] != b'*' &&
+        bytes[index] != b'\\' &&
         bytes[index] != b':' &&
-        bytes[index].to_int() != 0 else {
+        bytes[index].to_int() != 127 else {
         raise SnapshotError("manifest path contains a forbidden character")
       }
     }
   }
+}
+
+///|
+/// Windows normalizes trailing dots/spaces and treats DOS device names as
+/// devices even when an extension is present. Reject these names in manifests
+/// so restoring an untrusted snapshot cannot open a device path by mistake.
+fn is_windows_reserved_device_name(segment : BytesView) -> Bool {
+  let mut stem_length = segment.length()
+  for index in 0..<segment.length() {
+    if segment[index] == b'.' {
+      stem_length = index
+      break
+    }
+  }
+  while stem_length > 0 &&
+        (segment[stem_length - 1] == b' ' || segment[stem_length - 1] == b'.') {
+    stem_length -= 1
+  }
+  let stem = segment[:stem_length]
+  ascii_name_equal_ignore_case(stem, "con") ||
+  ascii_name_equal_ignore_case(stem, "prn") ||
+  ascii_name_equal_ignore_case(stem, "aux") ||
+  ascii_name_equal_ignore_case(stem, "nul") ||
+  ascii_name_equal_ignore_case(stem, "conin$") ||
+  ascii_name_equal_ignore_case(stem, "conout$") ||
+  ascii_name_equal_ignore_case(stem, "clock$") ||
+  is_numbered_windows_device_name(stem, "com") ||
+  is_numbered_windows_device_name(stem, "lpt")
+}
+
+///|
+fn is_numbered_windows_device_name(stem : BytesView, prefix : String) -> Bool {
+  if stem.length() == 4 && stem[3] >= b'1' && stem[3] <= b'9' {
+    return ascii_name_equal_ignore_case(stem[:3], prefix)
+  }
+  if stem.length() == 5 &&
+    stem[3] == b'\xC2' &&
+    (stem[4] == b'\xB9' || stem[4] == b'\xB2' || stem[4] == b'\xB3') {
+    return ascii_name_equal_ignore_case(stem[:3], prefix)
+  }
+  false
+}
+
+///|
+fn ascii_name_equal_ignore_case(value : BytesView, expected : String) -> Bool {
+  let expected_bytes = @utf8.encode(expected)
+  if value.length() != expected_bytes.length() {
+    return false
+  }
+  for index in 0..<value.length() {
+    let code = value[index].to_int()
+    let folded = if code >= 65 && code <= 90 { code + 32 } else { code }
+    if folded != expected_bytes[index].to_int() {
+      return false
+    }
+  }
+  true
 }
 
 ///|

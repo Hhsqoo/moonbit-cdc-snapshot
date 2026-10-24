@@ -1,0 +1,8 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "Hhsqoo/moonbit-cdc-snapshot" @snapshot,
+}
+
+pkgtype(kind: "executable")

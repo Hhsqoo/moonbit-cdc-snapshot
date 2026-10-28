@@ -19,11 +19,11 @@ repository = "https://github.com/Hhsqoo/moonbit-cdc-snapshot"
 
 license = "Apache-2.0"
 
-keywords = [ "fastcdc", "backup", "deduplication", "snapshot" ]
+keywords = [ "fastcdc", "snapshot", "chunk-analysis", "deduplication" ]
 
 preferred_target = "native"
 
-description = "A local content-defined snapshot and verification CLI written in MoonBit."
+description = "MoonBit Native CLI for local CDC snapshots and per-file chunk reuse analysis."
 
 import {
   "moonbitlang/x@0.5.6",

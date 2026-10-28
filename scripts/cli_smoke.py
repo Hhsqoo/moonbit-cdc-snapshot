@@ -97,6 +97,16 @@ def main() -> None:
         assert "changed: 1 files" in comparison.stdout
         reused_line = next(line for line in comparison.stdout.splitlines() if line.startswith("reused chunk bytes:"))
         assert int(reused_line.split(":", 1)[1]) > 0
+        analysis = run("analyze", str(repository), "baseline", "updated")
+        assert "CDC reuse analysis" in analysis.stdout
+        assert "changed: payload.bin" in analysis.stdout
+        assert "added: new.bin" in analysis.stdout
+        assert "reused: " in analysis.stdout
+        analysis_reused_line = next(
+            line for line in analysis.stdout.splitlines() if line.startswith("reused total:")
+        )
+        analysis_reused_bytes = int(analysis_reused_line.split(", ")[1].split()[0])
+        assert analysis_reused_bytes == int(reused_line.split(":", 1)[1])
         statistics = run("stats", str(repository))
         assert "snapshots: 2" in statistics.stdout
         assert "missing objects: 0" in statistics.stdout

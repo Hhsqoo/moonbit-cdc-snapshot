@@ -6,6 +6,10 @@ import {
 }
 
 // Values
+pub async fn analyze_repository_snapshots(String, String, String) -> ChunkReuseAnalysis raise SnapshotError
+
+pub fn analyze_snapshot_manifests(SnapshotManifest, SnapshotManifest) -> ChunkReuseAnalysis raise SnapshotError
+
 pub async fn compare_repository_snapshots(String, String, String) -> SnapshotDiff raise SnapshotError
 
 pub fn compare_snapshot_manifests(SnapshotManifest, SnapshotManifest) -> SnapshotDiff raise SnapshotError
@@ -70,6 +74,17 @@ pub fn ChunkRef::equal(Self, Self) -> Bool
 pub fn ChunkRef::not_equal(Self, Self) -> Bool
 pub fn ChunkRef::to_repr(Self) -> @debug.Repr
 
+pub(all) struct ChunkReuseAnalysis {
+  files : Array[FileChunkReuse]
+  reused_chunk_count : Int32
+  reused_chunk_bytes : Int64
+  new_chunk_count : Int32
+  new_chunk_bytes : Int64
+} derive(Eq, @debug.Debug)
+pub fn ChunkReuseAnalysis::equal(Self, Self) -> Bool
+pub fn ChunkReuseAnalysis::not_equal(Self, Self) -> Bool
+pub fn ChunkReuseAnalysis::to_repr(Self) -> @debug.Repr
+
 pub(all) struct FastCdcConfig {
   min : Int32
   average : Int32
@@ -92,6 +107,19 @@ pub struct FastCdcStream {
 pub fn FastCdcStream::finish(Self) -> Array[Bytes] raise SnapshotError
 pub fn FastCdcStream::new(FastCdcConfig) -> Self raise SnapshotError
 pub fn FastCdcStream::push(Self, BytesView) -> Array[Bytes] raise SnapshotError
+
+pub(all) struct FileChunkReuse {
+  path : String
+  change : SnapshotFileChange
+  file_bytes : Int64
+  reused_chunk_count : Int32
+  reused_chunk_bytes : Int64
+  new_chunk_count : Int32
+  new_chunk_bytes : Int64
+} derive(Eq, @debug.Debug)
+pub fn FileChunkReuse::equal(Self, Self) -> Bool
+pub fn FileChunkReuse::not_equal(Self, Self) -> Bool
+pub fn FileChunkReuse::to_repr(Self) -> @debug.Repr
 
 pub(all) struct FileRecord {
   path : String
@@ -163,6 +191,15 @@ pub(all) struct SnapshotDiff {
 pub fn SnapshotDiff::equal(Self, Self) -> Bool
 pub fn SnapshotDiff::not_equal(Self, Self) -> Bool
 pub fn SnapshotDiff::to_repr(Self) -> @debug.Repr
+
+pub(all) enum SnapshotFileChange {
+  Added
+  Changed
+  Unchanged
+} derive(Eq, @debug.Debug)
+pub fn SnapshotFileChange::equal(Self, Self) -> Bool
+pub fn SnapshotFileChange::not_equal(Self, Self) -> Bool
+pub fn SnapshotFileChange::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SnapshotManifest {
   version : Int32

@@ -30,9 +30,26 @@ Initialize a repository outside the directory you plan to snapshot:
 moon run --target native cmd/main -- init ./backup-store
 moon run --target native cmd/main -- snapshot ./backup-store ./project before-upgrade
 moon run --target native cmd/main -- list ./backup-store
-moon run --target native cmd/main -- verify ./backup-store
-moon run --target native cmd/main -- restore ./backup-store before-upgrade ./project-restored
 ```
+
+Change or add a file under `./project`, then create and inspect a second
+snapshot:
+
+```sh
+moon run --target native cmd/main -- snapshot ./backup-store ./project after-upgrade
+moon run --target native cmd/main -- compare ./backup-store before-upgrade after-upgrade
+moon run --target native cmd/main -- analyze ./backup-store before-upgrade after-upgrade
+moon run --target native cmd/main -- verify ./backup-store after-upgrade
+```
+
+Restore the selected snapshot to a new destination:
+
+```sh
+moon run --target native cmd/main -- restore ./backup-store after-upgrade ./project-restored
+```
+
+The `analyze` output separates reused and new chunk references for every file
+in the second snapshot. The repository must be outside the source directory.
 
 The destination passed to `restore` must not already exist. Restores are
 assembled in a temporary path and published with a same-volume rename after
@@ -48,6 +65,7 @@ show <repository> <id>
 verify <repository> [id]
 restore <repository> <id> <new-destination>
 compare <repository> <old-id> <new-id>
+analyze <repository> <old-id> <new-id>
 stats <repository>
 gc <repository> [--apply]
 forget <repository> <id> [--apply]
@@ -69,6 +87,14 @@ plus the number of current chunk-reference bytes whose digests occur in the
 older snapshot. Repeated identical chunks are counted once per reference, so
 that figure describes reusable logical bytes and is not a physical-space or
 runtime benchmark.
+
+`analyze` expands that summary by current file. It reports whether each path is
+added, changed, or unchanged, then counts chunk references and logical bytes
+reused from the older manifest versus new to it. It reads the two validated
+manifests only; it does not reread source files or verify object payloads. A
+repeated chunk reference is counted for every file that uses it, so the result
+is not a physical storage savings estimate. The snapshots must use the same
+chunking settings, as with `compare`.
 
 `gc` and `forget` show a preview by default. Pass `--apply` to remove orphaned
 objects and interrupted `.part` files, or to remove a snapshot manifest.
@@ -111,3 +137,27 @@ SHA-256 uses the pinned
 dependency. The project does not claim a new chunking algorithm; its work is in
 the MoonBit streaming implementation, repository layout, validated manifests,
 safe local operations, and end-to-end tooling.
+
+## Relationship to MoonRestore
+
+The projects share a problem area and several basic capabilities: file
+snapshots, CDC/content-addressed chunks, verification, comparison, and restore.
+This project does not claim those features or the FastCDC approach as unique.
+
+This repository is an independent implementation and does not reuse
+MoonRestore source code.
+The execution path is also different: this project's file and repository
+commands are built for MoonBit Native (`moon run --target native`), while
+MoonRestore's documented CLI entry is `node bin/moonrestore.mjs` and its
+documented full disk, network, and GUI runtime depends on Node. This is a
+runtime and packaging distinction, not a claim that MoonRestore lacks Native
+MoonBit code.
+
+The functional extension here is `analyze`, which expands the aggregate reuse
+figures already reported by `compare` into per-file counts of reusable and new
+CDC chunk references and their logical bytes. It reads two validated manifests;
+it does not introduce a different backup or deduplication mechanism. MoonRestore
+documents a broader recovery application, including a workbench, database
+workflows, and remote copies; those are outside this project's current scope.
+The per-file report is not a disk-space or speed benchmark, and this project
+does not present itself as a replacement for MoonRestore.

@@ -68,6 +68,40 @@ async test "repository snapshots trees, reuses content, verifies and restores" {
     second.total_bytes,
   )
 
+  let analysis = @moonbit-cdc-snapshot.analyze_repository_snapshots(
+    repository, "baseline", "updated",
+  )
+  assert_eq(analysis.reused_chunk_bytes, difference.reused_chunk_bytes)
+  assert_eq(analysis.new_chunk_bytes, difference.new_chunk_bytes)
+  assert_eq(
+    analysis.reused_chunk_count + analysis.new_chunk_count,
+    second.chunk_count,
+  )
+  let mut found_changed_file = false
+  let mut found_added_file = false
+  let mut per_file_reused_bytes = 0L
+  let mut per_file_new_bytes = 0L
+  for item in analysis.files {
+    per_file_reused_bytes += item.reused_chunk_bytes
+    per_file_new_bytes += item.new_chunk_bytes
+    if item.path == "a.bin" {
+      found_changed_file = true
+      assert_eq(item.change, @moonbit-cdc-snapshot.SnapshotFileChange::Changed)
+      assert_true(item.reused_chunk_count > 0)
+      assert_true(item.new_chunk_count > 0)
+    }
+    if item.path == "new.bin" {
+      found_added_file = true
+      assert_eq(item.change, @moonbit-cdc-snapshot.SnapshotFileChange::Added)
+      assert_eq(item.reused_chunk_count, 0)
+      assert_true(item.new_chunk_count > 0)
+    }
+  }
+  assert_true(found_changed_file)
+  assert_true(found_added_file)
+  assert_eq(per_file_reused_bytes, analysis.reused_chunk_bytes)
+  assert_eq(per_file_new_bytes, analysis.new_chunk_bytes)
+
   let destination = root + "/restored"
   @moonbit-cdc-snapshot.restore_repository_snapshot(
     repository, "updated", destination,

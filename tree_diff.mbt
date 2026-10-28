@@ -1,4 +1,53 @@
 ///|
+/// Whether a path in the current snapshot is new, changed, or unchanged.
+pub(all) enum SnapshotFileChange {
+  Added
+  Changed
+  Unchanged
+} derive(Eq, Debug)
+
+///|
+pub extend SnapshotFileChange with Eq::{equal, not_equal}
+
+///|
+pub extend SnapshotFileChange with @debug.Debug::{to_repr}
+
+///|
+/// Per-file accounting of current chunk references against a previous snapshot.
+pub(all) struct FileChunkReuse {
+  path : String
+  change : SnapshotFileChange
+  file_bytes : Int64
+  reused_chunk_count : Int32
+  reused_chunk_bytes : Int64
+  new_chunk_count : Int32
+  new_chunk_bytes : Int64
+} derive(Eq, Debug)
+
+///|
+pub extend FileChunkReuse with Eq::{equal, not_equal}
+
+///|
+pub extend FileChunkReuse with @debug.Debug::{to_repr}
+
+///|
+/// CDC chunk reuse totals and per-file details for two snapshots.
+/// Byte totals are logical chunk-reference bytes, not physical disk savings.
+pub(all) struct ChunkReuseAnalysis {
+  files : Array[FileChunkReuse]
+  reused_chunk_count : Int32
+  reused_chunk_bytes : Int64
+  new_chunk_count : Int32
+  new_chunk_bytes : Int64
+} derive(Eq, Debug)
+
+///|
+pub extend ChunkReuseAnalysis with Eq::{equal, not_equal}
+
+///|
+pub extend ChunkReuseAnalysis with @debug.Debug::{to_repr}
+
+///|
 /// File-level changes between two directory snapshots.
 pub(all) struct SnapshotDiff {
   added : Array[String]
@@ -20,18 +69,18 @@ pub extend SnapshotDiff with Eq::{equal, not_equal}
 pub extend SnapshotDiff with @debug.Debug::{to_repr}
 
 ///|
-/// Compare two already validated manifests without reading object payloads.
-pub fn compare_snapshot_manifests(
+/// Explain current snapshot chunk reuse by path without reading source files or
+/// object payloads. Repeated references are counted separately.
+pub fn analyze_snapshot_manifests(
   previous : SnapshotManifest,
   current : SnapshotManifest,
-) -> SnapshotDiff raise SnapshotError {
+) -> ChunkReuseAnalysis raise SnapshotError {
   guard previous.config == current.config else {
     raise SnapshotError(
       "cannot compare snapshots with different chunk settings",
     )
   }
   let previous_by_path : @hashmap.HashMap[String, FileRecord] = HashMap([])
-  let current_by_path : @hashmap.HashMap[String, FileRecord] = HashMap([])
   let old_chunks : @hashmap.HashMap[String, Int32] = HashMap([])
   for file in previous.files {
     previous_by_path.set(file.path, file)
@@ -39,8 +88,67 @@ pub fn compare_snapshot_manifests(
       old_chunks.set(chunk.digest, chunk.size)
     }
   }
+  let details : Array[FileChunkReuse] = []
+  let mut reused_chunk_count = 0
+  let mut reused_chunk_bytes = 0L
+  let mut new_chunk_count = 0
+  let mut new_chunk_bytes = 0L
   for file in current.files {
-    current_by_path.set(file.path, file)
+    let change = match previous_by_path.get(file.path) {
+      None => SnapshotFileChange::Added
+      Some(old_file) if old_file.digest == file.digest =>
+        SnapshotFileChange::Unchanged
+      Some(_) => SnapshotFileChange::Changed
+    }
+    let mut file_reused_chunk_count = 0
+    let mut file_reused_chunk_bytes = 0L
+    let mut file_new_chunk_count = 0
+    let mut file_new_chunk_bytes = 0L
+    for chunk in file.chunks {
+      match old_chunks.get(chunk.digest) {
+        Some(old_size) if old_size == chunk.size => {
+          file_reused_chunk_count += 1
+          file_reused_chunk_bytes += chunk.size.to_int64()
+        }
+        _ => {
+          file_new_chunk_count += 1
+          file_new_chunk_bytes += chunk.size.to_int64()
+        }
+      }
+    }
+    reused_chunk_count += file_reused_chunk_count
+    reused_chunk_bytes += file_reused_chunk_bytes
+    new_chunk_count += file_new_chunk_count
+    new_chunk_bytes += file_new_chunk_bytes
+    details.push({
+      path: file.path,
+      change,
+      file_bytes: file.size,
+      reused_chunk_count: file_reused_chunk_count,
+      reused_chunk_bytes: file_reused_chunk_bytes,
+      new_chunk_count: file_new_chunk_count,
+      new_chunk_bytes: file_new_chunk_bytes,
+    })
+  }
+  {
+    files: details,
+    reused_chunk_count,
+    reused_chunk_bytes,
+    new_chunk_count,
+    new_chunk_bytes,
+  }
+}
+
+///|
+/// Compare two already validated manifests without reading object payloads.
+pub fn compare_snapshot_manifests(
+  previous : SnapshotManifest,
+  current : SnapshotManifest,
+) -> SnapshotDiff raise SnapshotError {
+  let analysis = analyze_snapshot_manifests(previous, current)
+  let current_paths : @hashmap.HashMap[String, Bool] = HashMap([])
+  for file in current.files {
+    current_paths.set(file.path, true)
   }
   let added : Array[String] = []
   let removed : Array[String] = []
@@ -50,37 +158,26 @@ pub fn compare_snapshot_manifests(
   let mut removed_bytes = 0L
   let mut changed_bytes = 0L
   let mut unchanged_bytes = 0L
-  for file in current.files {
-    match previous_by_path.get(file.path) {
-      None => {
+  for file in analysis.files {
+    match file.change {
+      SnapshotFileChange::Added => {
         added.push(file.path)
-        added_bytes += file.size
+        added_bytes += file.file_bytes
       }
-      Some(old_file) if old_file.digest == file.digest => {
-        unchanged.push(file.path)
-        unchanged_bytes += file.size
-      }
-      Some(_) => {
+      SnapshotFileChange::Changed => {
         changed.push(file.path)
-        changed_bytes += file.size
+        changed_bytes += file.file_bytes
+      }
+      SnapshotFileChange::Unchanged => {
+        unchanged.push(file.path)
+        unchanged_bytes += file.file_bytes
       }
     }
   }
   for old_file in previous.files {
-    if !current_by_path.contains(old_file.path) {
+    if !current_paths.contains(old_file.path) {
       removed.push(old_file.path)
       removed_bytes += old_file.size
-    }
-  }
-  let mut reused_chunk_bytes = 0L
-  let mut new_chunk_bytes = 0L
-  for file in current.files {
-    for chunk in file.chunks {
-      match old_chunks.get(chunk.digest) {
-        Some(old_size) if old_size == chunk.size =>
-          reused_chunk_bytes += chunk.size.to_int64()
-        _ => new_chunk_bytes += chunk.size.to_int64()
-      }
     }
   }
   {
@@ -92,8 +189,8 @@ pub fn compare_snapshot_manifests(
     removed_bytes,
     changed_bytes,
     unchanged_bytes,
-    reused_chunk_bytes,
-    new_chunk_bytes,
+    reused_chunk_bytes: analysis.reused_chunk_bytes,
+    new_chunk_bytes: analysis.new_chunk_bytes,
   }
 }
 
@@ -107,4 +204,16 @@ pub async fn compare_repository_snapshots(
   let previous = read_repository_manifest(root, previous_id)
   let current = read_repository_manifest(root, current_id)
   compare_snapshot_manifests(previous, current)
+}
+
+///|
+/// Load and analyze two repository manifests without reading object payloads.
+pub async fn analyze_repository_snapshots(
+  root : String,
+  previous_id : String,
+  current_id : String,
+) -> ChunkReuseAnalysis raise SnapshotError {
+  let previous = read_repository_manifest(root, previous_id)
+  let current = read_repository_manifest(root, current_id)
+  analyze_snapshot_manifests(previous, current)
 }

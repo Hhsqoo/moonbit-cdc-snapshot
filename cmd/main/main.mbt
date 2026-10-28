@@ -110,6 +110,37 @@ async fn run(args : Array[String]) -> Unit raise @snapshot.SnapshotError {
       println("reused chunk bytes: \{result.reused_chunk_bytes}")
       println("new chunk bytes: \{result.new_chunk_bytes}")
     }
+    "analyze" => {
+      require_count(args, 4)
+      let report = @snapshot.analyze_repository_snapshots(
+        args[1],
+        args[2],
+        args[3],
+      )
+      println(
+        "CDC reuse analysis (logical bytes; repeated chunk references are counted per file)",
+      )
+      println(
+        "reused total: \{report.reused_chunk_count} chunk references, \{report.reused_chunk_bytes} bytes",
+      )
+      println(
+        "new total: \{report.new_chunk_count} chunk references, \{report.new_chunk_bytes} bytes",
+      )
+      for file in report.files {
+        let change = match file.change {
+          @snapshot.SnapshotFileChange::Added => "added"
+          @snapshot.SnapshotFileChange::Changed => "changed"
+          @snapshot.SnapshotFileChange::Unchanged => "unchanged"
+        }
+        println("  \{change}: \{file.path} (\{file.file_bytes} bytes)")
+        println(
+          "    reused: \{file.reused_chunk_count} chunk references, \{file.reused_chunk_bytes} bytes",
+        )
+        println(
+          "    new: \{file.new_chunk_count} chunk references, \{file.new_chunk_bytes} bytes",
+        )
+      }
+    }
     "stats" => {
       require_count(args, 2)
       let stats = @snapshot.inspect_repository(args[1])
@@ -298,6 +329,7 @@ fn print_usage() -> Unit {
   println("  verify <repository> [id]")
   println("  restore <repository> <id> <new-destination>")
   println("  compare <repository> <old-id> <new-id>")
+  println("  analyze <repository> <old-id> <new-id>")
   println("  stats <repository>")
   println("  gc <repository> [--apply]")
   println("  forget <repository> <id> [--apply]")

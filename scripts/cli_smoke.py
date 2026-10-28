@@ -107,6 +107,23 @@ def main() -> None:
         )
         analysis_reused_bytes = int(analysis_reused_line.split(", ")[1].split()[0])
         assert analysis_reused_bytes == int(reused_line.split(":", 1)[1])
+        chunk_map = run(
+            "explain", str(repository), "baseline", "updated", "payload.bin", "1000"
+        )
+        assert "CDC chunk map: payload.bin (changed)" in chunk_map.stdout
+        assert "reused from payload.bin @" in chunk_map.stdout
+        assert "(shifted)" in chunk_map.stdout
+        assert "sha256=" in chunk_map.stdout
+        bounded_map = run(
+            "explain", str(repository), "baseline", "updated", "payload.bin", "1"
+        )
+        assert "showing 1 of " in bounded_map.stdout
+        assert "omitted)" in bounded_map.stdout
+        invalid_map = run(
+            "explain", str(repository), "baseline", "updated", "payload.bin", "1001",
+            expect_success=False,
+        )
+        assert "cannot exceed 1000" in invalid_map.stdout
         statistics = run("stats", str(repository))
         assert "snapshots: 2" in statistics.stdout
         assert "missing objects: 0" in statistics.stdout

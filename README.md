@@ -39,6 +39,7 @@ snapshot:
 moon run --target native cmd/main -- snapshot ./backup-store ./project after-upgrade
 moon run --target native cmd/main -- compare ./backup-store before-upgrade after-upgrade
 moon run --target native cmd/main -- analyze ./backup-store before-upgrade after-upgrade
+moon run --target native cmd/main -- explain ./backup-store before-upgrade after-upgrade path/to/changed-file.bin
 moon run --target native cmd/main -- verify ./backup-store after-upgrade
 ```
 
@@ -49,7 +50,11 @@ moon run --target native cmd/main -- restore ./backup-store after-upgrade ./proj
 ```
 
 The `analyze` output separates reused and new chunk references for every file
-in the second snapshot. The repository must be outside the source directory.
+in the second snapshot. Use `explain` to inspect a file's current chunk offsets,
+sizes, and digests, along with a representative matching path and offset in the
+previous snapshot. It reports complete per-file reuse totals while showing at
+most 64 chunk rows by default; pass a final limit from 1 to 1,000 to change that
+bound. The repository must be outside the source directory.
 
 The destination passed to `restore` must not already exist. Restores are
 assembled in a temporary path and published with a same-volume rename after
@@ -66,6 +71,7 @@ verify <repository> [id]
 restore <repository> <id> <new-destination>
 compare <repository> <old-id> <new-id>
 analyze <repository> <old-id> <new-id>
+explain <repository> <old-id> <new-id> <current-file-path> [limit]
 stats <repository>
 gc <repository> [--apply]
 forget <repository> <id> [--apply]
@@ -95,6 +101,16 @@ manifests only; it does not reread source files or verify object payloads. A
 repeated chunk reference is counted for every file that uses it, so the result
 is not a physical storage savings estimate. The snapshots must use the same
 chunking settings, as with `compare`.
+
+`explain` maps the current file's chunk references to file-relative offsets and
+prints each shown chunk's size and SHA-256 digest. When a digest and size are
+present in the earlier manifest, it shows one representative earlier path and
+offset, which makes shifted reuse visible after an insertion or edit. Repeated
+identical chunks can have multiple earlier occurrences; the displayed location
+is only one match. Counts and byte totals still cover every chunk in the file,
+even when the detail rows are capped. Like `analyze`, the command reads validated
+manifests only; it does not verify object payloads or measure physical storage
+savings. The snapshots must use the same chunking settings.
 
 `gc` and `forget` show a preview by default. Pass `--apply` to remove orphaned
 objects and interrupted `.part` files, or to remove a snapshot manifest.
@@ -153,11 +169,11 @@ documented full disk, network, and GUI runtime depends on Node. This is a
 runtime and packaging distinction, not a claim that MoonRestore lacks Native
 MoonBit code.
 
-The functional extension here is `analyze`, which expands the aggregate reuse
-figures already reported by `compare` into per-file counts of reusable and new
-CDC chunk references and their logical bytes. It reads two validated manifests;
-it does not introduce a different backup or deduplication mechanism. MoonRestore
-documents a broader recovery application, including a workbench, database
-workflows, and remote copies; those are outside this project's current scope.
-The per-file report is not a disk-space or speed benchmark, and this project
+The project adds `analyze` for per-file reuse totals and `explain` for bounded,
+file-relative chunk maps showing where matching chunks occur in the previous
+manifest. These are inspectability features built on this repository's own
+manifests; they do not introduce a different backup or deduplication mechanism.
+MoonRestore documents a broader recovery application, including a workbench,
+database workflows, and remote copies; those are outside this project's current
+scope. The reports are not disk-space or speed benchmarks, and this project
 does not present itself as a replacement for MoonRestore.

@@ -18,6 +18,10 @@ pub async fn create_snapshot(String, String, String, config? : FastCdcConfig, ex
 
 pub let default_config : FastCdcConfig
 
+pub async fn explain_repository_file_chunks(String, String, String, String, Int32) -> SnapshotFileExplanation raise SnapshotError
+
+pub fn explain_snapshot_file_chunks(SnapshotManifest, SnapshotManifest, String, Int32) -> SnapshotFileExplanation raise SnapshotError
+
 pub fn fastcdc_ranges(BytesView, config? : FastCdcConfig) -> Array[ChunkRange] raise SnapshotError
 
 pub async fn forget_snapshot(String, String, Bool) -> ForgetResult raise SnapshotError
@@ -73,6 +77,18 @@ pub(all) struct ChunkRef {
 pub fn ChunkRef::equal(Self, Self) -> Bool
 pub fn ChunkRef::not_equal(Self, Self) -> Bool
 pub fn ChunkRef::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ChunkReferenceExplanation {
+  index : Int32
+  current_offset : Int64
+  size : Int32
+  digest : String
+  previous_path : String?
+  previous_offset : Int64?
+} derive(Eq, @debug.Debug)
+pub fn ChunkReferenceExplanation::equal(Self, Self) -> Bool
+pub fn ChunkReferenceExplanation::not_equal(Self, Self) -> Bool
+pub fn ChunkReferenceExplanation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct ChunkReuseAnalysis {
   files : Array[FileChunkReuse]
@@ -200,6 +216,16 @@ pub(all) enum SnapshotFileChange {
 pub fn SnapshotFileChange::equal(Self, Self) -> Bool
 pub fn SnapshotFileChange::not_equal(Self, Self) -> Bool
 pub fn SnapshotFileChange::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SnapshotFileExplanation {
+  file : FileChunkReuse
+  chunk_count : Int32
+  chunks : Array[ChunkReferenceExplanation]
+  omitted_count : Int32
+} derive(Eq, @debug.Debug)
+pub fn SnapshotFileExplanation::equal(Self, Self) -> Bool
+pub fn SnapshotFileExplanation::not_equal(Self, Self) -> Bool
+pub fn SnapshotFileExplanation::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SnapshotManifest {
   version : Int32

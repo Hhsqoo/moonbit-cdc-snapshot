@@ -48,6 +48,39 @@ pub extend ChunkReuseAnalysis with Eq::{equal, not_equal}
 pub extend ChunkReuseAnalysis with @debug.Debug::{to_repr}
 
 ///|
+/// One current chunk and its deterministic matching location in the previous
+/// snapshot, when the digest and size are reusable.
+pub(all) struct ChunkReferenceExplanation {
+  index : Int32
+  current_offset : Int64
+  size : Int32
+  digest : String
+  previous_path : String?
+  previous_offset : Int64?
+} derive(Eq, Debug)
+
+///|
+pub extend ChunkReferenceExplanation with Eq::{equal, not_equal}
+
+///|
+pub extend ChunkReferenceExplanation with @debug.Debug::{to_repr}
+
+///|
+/// A bounded chunk map for one file in the current snapshot.
+pub(all) struct SnapshotFileExplanation {
+  file : FileChunkReuse
+  chunk_count : Int32
+  chunks : Array[ChunkReferenceExplanation]
+  omitted_count : Int32
+} derive(Eq, Debug)
+
+///|
+pub extend SnapshotFileExplanation with Eq::{equal, not_equal}
+
+///|
+pub extend SnapshotFileExplanation with @debug.Debug::{to_repr}
+
+///|
 /// File-level changes between two directory snapshots.
 pub(all) struct SnapshotDiff {
   added : Array[String]
@@ -216,4 +249,136 @@ pub async fn analyze_repository_snapshots(
   let previous = read_repository_manifest(root, previous_id)
   let current = read_repository_manifest(root, current_id)
   analyze_snapshot_manifests(previous, current)
+}
+
+///|
+/// A representative prior occurrence of a content-addressed chunk.
+priv struct PreviousChunkLocation {
+  path : String
+  offset : Int64
+  size : Int32
+}
+
+///|
+/// Explain chunk positions for one current file. Totals cover the complete
+/// file; at most `limit` individual chunk rows are retained.
+pub fn explain_snapshot_file_chunks(
+  previous : SnapshotManifest,
+  current : SnapshotManifest,
+  path : String,
+  limit : Int32,
+) -> SnapshotFileExplanation raise SnapshotError {
+  guard previous.config == current.config else {
+    raise SnapshotError(
+      "cannot compare snapshots with different chunk settings",
+    )
+  }
+  guard limit >= 1 && limit <= 1000 else {
+    raise SnapshotError("chunk detail limit must be between 1 and 1000")
+  }
+  let previous_by_path : @hashmap.HashMap[String, FileRecord] = HashMap([])
+  let previous_chunks : @hashmap.HashMap[String, PreviousChunkLocation] = HashMap([],
+  )
+  for old_file in previous.files {
+    previous_by_path.set(old_file.path, old_file)
+    let mut old_offset = 0L
+    for chunk in old_file.chunks {
+      if !previous_chunks.contains(chunk.digest) {
+        previous_chunks.set(chunk.digest, {
+          path: old_file.path,
+          offset: old_offset,
+          size: chunk.size,
+        })
+      }
+      old_offset += chunk.size.to_int64()
+    }
+  }
+  let mut selected_file : FileRecord? = None
+  for file in current.files {
+    if file.path == path {
+      selected_file = Some(file)
+    }
+  }
+  let current_file = match selected_file {
+    Some(file) => file
+    None =>
+      raise SnapshotError(
+        "file is not present in the current snapshot: " + path,
+      )
+  }
+  let change = match previous_by_path.get(path) {
+    None => SnapshotFileChange::Added
+    Some(old_file) if old_file.digest == current_file.digest =>
+      SnapshotFileChange::Unchanged
+    Some(_) => SnapshotFileChange::Changed
+  }
+  let mut reused_chunk_count = 0
+  let mut reused_chunk_bytes = 0L
+  let mut new_chunk_count = 0
+  let mut new_chunk_bytes = 0L
+  let chunks : Array[ChunkReferenceExplanation] = []
+  let mut current_offset = 0L
+  for index, chunk in current_file.chunks {
+    let old_location = match previous_chunks.get(chunk.digest) {
+      Some(location) if location.size == chunk.size => Some(location)
+      _ => None
+    }
+    match old_location {
+      Some(_) => {
+        reused_chunk_count += 1
+        reused_chunk_bytes += chunk.size.to_int64()
+      }
+      None => {
+        new_chunk_count += 1
+        new_chunk_bytes += chunk.size.to_int64()
+      }
+    }
+    if index < limit {
+      let previous_path = match old_location {
+        Some(location) => Some(location.path)
+        None => None
+      }
+      let previous_offset = match old_location {
+        Some(location) => Some(location.offset)
+        None => None
+      }
+      chunks.push({
+        index,
+        current_offset,
+        size: chunk.size,
+        digest: chunk.digest,
+        previous_path,
+        previous_offset,
+      })
+    }
+    current_offset += chunk.size.to_int64()
+  }
+  {
+    file: {
+      path: current_file.path,
+      change,
+      file_bytes: current_file.size,
+      reused_chunk_count,
+      reused_chunk_bytes,
+      new_chunk_count,
+      new_chunk_bytes,
+    },
+    chunk_count: current_file.chunks.length(),
+    omitted_count: current_file.chunks.length() - chunks.length(),
+    chunks,
+  }
+}
+
+///|
+/// Load two manifests and explain chunk positions for a selected current file.
+pub async fn explain_repository_file_chunks(
+  root : String,
+  previous_id : String,
+  current_id : String,
+  path : String,
+  limit : Int32,
+) -> SnapshotFileExplanation raise SnapshotError {
+  let previous = read_repository_manifest(root, previous_id)
+  let current = read_repository_manifest(root, current_id)
+  explain_snapshot_file_chunks(previous, current, path, limit)
 }

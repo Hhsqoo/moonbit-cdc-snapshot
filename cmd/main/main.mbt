@@ -141,6 +141,62 @@ async fn run(args : Array[String]) -> Unit raise @snapshot.SnapshotError {
         )
       }
     }
+    "explain" => {
+      guard args.length() == 5 || args.length() == 6 else {
+        raise @snapshot.SnapshotError(
+          "usage: explain <repository> <old-id> <new-id> <current-file-path> [limit]",
+        )
+      }
+      let limit = if args.length() == 6 {
+        parse_chunk_detail_limit(args[5])
+      } else {
+        64
+      }
+      let report = @snapshot.explain_repository_file_chunks(
+        args[1],
+        args[2],
+        args[3],
+        args[4],
+        limit,
+      )
+      let change = match report.file.change {
+        @snapshot.SnapshotFileChange::Added => "added"
+        @snapshot.SnapshotFileChange::Changed => "changed"
+        @snapshot.SnapshotFileChange::Unchanged => "unchanged"
+      }
+      println("CDC chunk map: \{report.file.path} (\{change})")
+      println(
+        "reused: \{report.file.reused_chunk_count} chunks, \{report.file.reused_chunk_bytes} bytes",
+      )
+      println(
+        "new: \{report.file.new_chunk_count} chunks, \{report.file.new_chunk_bytes} bytes",
+      )
+      println(
+        "showing \{report.chunks.length()} of \{report.chunk_count} chunks (\{report.omitted_count} omitted)",
+      )
+      for chunk in report.chunks {
+        let end_offset = chunk.current_offset + chunk.size.to_int64()
+        let location = match (chunk.previous_path, chunk.previous_offset) {
+          (Some(previous_path), Some(previous_offset)) => {
+            let shift = if previous_offset == chunk.current_offset {
+              ""
+            } else {
+              " (shifted)"
+            }
+            "reused from " +
+            previous_path +
+            " @ " +
+            previous_offset.to_string() +
+            shift
+          }
+          (None, None) => "new"
+          _ => "invalid reference"
+        }
+        println(
+          "  #\{chunk.index} current [\{chunk.current_offset}, \{end_offset}) \{chunk.size} bytes \{location} sha256=\{chunk.digest}",
+        )
+      }
+    }
     "stats" => {
       require_count(args, 2)
       let stats = @snapshot.inspect_repository(args[1])
@@ -296,6 +352,17 @@ fn parse_chunk_size(value : String) -> Int32 raise @snapshot.SnapshotError {
 }
 
 ///|
+fn parse_chunk_detail_limit(
+  value : String,
+) -> Int32 raise @snapshot.SnapshotError {
+  let limit = parse_chunk_size(value)
+  guard limit <= 1000 else {
+    raise @snapshot.SnapshotError("chunk detail limit cannot exceed 1000")
+  }
+  limit
+}
+
+///|
 fn print_summary(item : @snapshot.SnapshotSummary) -> Unit {
   println(
     "\{item.id}: \{item.file_count} files, \{item.directory_count} directories, \{item.total_bytes} bytes, \{item.chunk_count} chunks",
@@ -330,6 +397,7 @@ fn print_usage() -> Unit {
   println("  restore <repository> <id> <new-destination>")
   println("  compare <repository> <old-id> <new-id>")
   println("  analyze <repository> <old-id> <new-id>")
+  println("  explain <repository> <old-id> <new-id> <file-path> [limit]")
   println("  stats <repository>")
   println("  gc <repository> [--apply]")
   println("  forget <repository> <id> [--apply]")

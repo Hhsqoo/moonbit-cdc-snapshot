@@ -102,6 +102,65 @@ async test "repository snapshots trees, reuses content, verifies and restores" {
   assert_eq(per_file_reused_bytes, analysis.reused_chunk_bytes)
   assert_eq(per_file_new_bytes, analysis.new_chunk_bytes)
 
+  let explanation = @moonbit-cdc-snapshot.explain_repository_file_chunks(
+    repository, "baseline", "updated", "a.bin", 1000,
+  )
+  assert_eq(
+    explanation.file.change,
+    @moonbit-cdc-snapshot.SnapshotFileChange::Changed,
+  )
+  assert_eq(explanation.chunks.length(), explanation.chunk_count)
+  assert_eq(explanation.omitted_count, 0)
+  assert_eq(
+    explanation.file.reused_chunk_count + explanation.file.new_chunk_count,
+    explanation.chunk_count,
+  )
+  let mut expected_offset = 0L
+  let mut found_shifted_reuse = false
+  for chunk in explanation.chunks {
+    assert_eq(chunk.current_offset, expected_offset)
+    expected_offset += chunk.size.to_int64()
+    match (chunk.previous_path, chunk.previous_offset) {
+      (Some(_), Some(previous_offset)) =>
+        if previous_offset != chunk.current_offset {
+          found_shifted_reuse = true
+        }
+      (None, None) => ()
+      _ => panic()
+    }
+  }
+  assert_true(found_shifted_reuse)
+
+  let limited_explanation = @moonbit-cdc-snapshot.explain_repository_file_chunks(
+    repository, "baseline", "updated", "a.bin", 2,
+  )
+  assert_eq(limited_explanation.chunks.length(), 2)
+  assert_eq(limited_explanation.omitted_count, explanation.chunk_count - 2)
+  assert_eq(
+    limited_explanation.file.reused_chunk_bytes,
+    explanation.file.reused_chunk_bytes,
+  )
+  try {
+    ignore(
+      @moonbit-cdc-snapshot.explain_repository_file_chunks(
+        repository, "baseline", "updated", "a.bin", 0,
+      ),
+    )
+    panic()
+  } catch {
+    @moonbit-cdc-snapshot.SnapshotError::SnapshotError(_) => ()
+  }
+  try {
+    ignore(
+      @moonbit-cdc-snapshot.explain_repository_file_chunks(
+        repository, "baseline", "updated", "missing.bin", 64,
+      ),
+    )
+    panic()
+  } catch {
+    @moonbit-cdc-snapshot.SnapshotError::SnapshotError(_) => ()
+  }
+
   let destination = root + "/restored"
   @moonbit-cdc-snapshot.restore_repository_snapshot(
     repository, "updated", destination,
